@@ -22,12 +22,67 @@
 
 """Application entry point for the Falcon ASGI app."""
 
-import falcon.asgi  # <-- change from falcon to falcon.asgi
+import falcon.asgi
 from auth import AuthMiddleware, RegisterResource, LoginResource
 from resources import EntityResource, SchemaResource
+from falcon import Request, Response, media
+from pydantic import ValidationError
+import json
+import traceback
+from functools import partial
+from typing import Any
+import nest_asyncio
+from core.setup_logging import setup_logger
+from core.encoder import CustomJsonEncoder, CustomJsonDecoder
+
+# Patch the event loop with nest_asyncio
+nest_asyncio.apply()
+# Create a custom logger
+logger = setup_logger(__name__)
+
+
+async def handle_validation_error(
+    req: Request, resp: Response, exception: ValidationError, params: Any
+) -> None:
+    """Handle Pydantic ValidationError exceptions."""
+    # Optionally log the exception details
+    logger.error(f"Validation error: {exception}")
+
+    # Set the HTTP status code to 422 Unprocessable Entity
+    resp.status = falcon.HTTP_422
+
+    # Prepare a detailed error response
+    resp.media = {
+        "title": "Unprocessable Entity",
+        "description": "The request contains invalid data.",
+        "errors": exception.errors(),
+    }
+
+
+async def custom_handle_uncaught_exception(
+    req: Request, resp: Response, exception: Exception, _: Any
+) -> None:
+    """Handle uncaught exceptions."""
+    traceback.print_exc()
+    resp.status = falcon.HTTP_500
+    resp.media = f"{exception}"
+
 
 # Create an async Falcon app instance
-app = falcon.asgi.App(middleware=[AuthMiddleware()])
+app = falcon.asgi.App(middleware=[AuthMiddleware()], cors_enable=True)
+app.add_error_handler(ValidationError, handle_validation_error)
+app.add_error_handler(Exception, custom_handle_uncaught_exception)
+
+# JSON Handler for the config
+json_handler = media.JSONHandler(
+    dumps=partial(json.dumps, cls=CustomJsonEncoder, sort_keys=True),
+    loads=partial(json.loads, cls=CustomJsonDecoder),
+)
+extra_handlers = {
+    "application/json": json_handler,
+}
+app.req_options.media_handlers.update(extra_handlers)
+app.resp_options.media_handlers.update(extra_handlers)
 
 # Public auth endpoints
 app.add_route("/api/auth/register", RegisterResource())

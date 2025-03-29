@@ -35,7 +35,7 @@ from typing import Any
 # Load JWT secret from environment
 JWT_SECRET = os.environ.get("JWT_SECRET", "CHANGE_ME_IN_PRODUCTION")
 JWT_ALGO = "HS256"
-JWT_EXP_SECONDS = 3600  # 1 hour expiry for access tokens
+JWT_EXP_SECONDS = 3600 * 24  # 1 day expiry for access tokens
 
 
 def hash_password(plain_password: str) -> Any:
@@ -155,8 +155,10 @@ class LoginResource:
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
         # Store token in DB for potential revocation
-        await tokens_coll.insert_one(
-            {"_id": user["_id"], "token": token, "expires_at": exp}
+        await tokens_coll.find_one_and_update(
+            {"_id": user["_id"]},
+            update={"$set": {"token": token, "expires_at": exp}},
+            upsert=True,
         )
 
         resp.media = {"access_token": token}
