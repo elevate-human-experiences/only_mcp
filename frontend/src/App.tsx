@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -9,14 +9,21 @@ function App() {
   // In a real app, you might store in localStorage or a Context.
   const [token, setToken] = useState<string | null>(null);
 
+  useEffect(() => {
+    const storedToken = sessionStorage.getItem("access_token");
+    if (storedToken) {
+      setToken(storedToken);
+    }
+  }, []);
+
   const handleLogin = (newToken: string) => {
     setToken(newToken);
-    // localStorage.setItem('jwt', newToken); // if you want to persist across refresh
+    sessionStorage.setItem("access_token", newToken); // store token in sessionStorage
   };
 
   const handleLogout = () => {
     setToken(null);
-    // localStorage.removeItem('jwt');
+    sessionStorage.removeItem("access_token"); // clear the session storage token
   };
 
   return (

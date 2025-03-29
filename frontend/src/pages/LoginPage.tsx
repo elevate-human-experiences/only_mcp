@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -10,6 +11,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem("access_token")) {
+      navigate("/");
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,6 +35,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const data = await res.json();
       const token = data.access_token;
       onLogin(token);
+      navigate("/"); // updated redirect
     } catch (err: any) {
       setError(err.message);
     }

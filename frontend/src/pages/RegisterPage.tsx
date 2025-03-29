@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -6,6 +7,13 @@ export function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem("access_token")) {
+      navigate("/");
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,9 +28,9 @@ export function RegisterPage() {
       if (!res.ok) {
         throw new Error(data.description || "Registration failed");
       }
-      setMessage("Registration successful! You can now log in.");
-      setUsername("");
-      setPassword("");
+      const token = data.access_token;
+      sessionStorage.setItem("access_token", token);
+      navigate("/"); // updated redirect
     } catch (err: any) {
       setMessage(`Error: ${err.message}`);
     }

@@ -25,10 +25,10 @@
 import json
 import falcon
 import datetime
-from bson import ObjectId
 import jsonschema
 from falcon import HTTPBadRequest, HTTPNotFound, Request, Response
 from db import entities_coll, schemas_coll, redis_client
+from uuid import uuid4
 
 
 class EntityResource:
@@ -38,7 +38,7 @@ class EntityResource:
         """Handle GET request to read or list entities."""
         _ = req.context.user_id  # from AuthMiddleware
         entity_type = req.get_param("type")
-        entity_id = req.get_param("id")
+        entity_id = req.get_param("_id")
 
         if not entity_type:
             raise HTTPBadRequest(description="Missing 'type' param")
@@ -52,7 +52,7 @@ class EntityResource:
             else:
                 doc = await entities_coll.find_one(
                     {
-                        "_id": ObjectId(entity_id),
+                        "_id": entity_id,
                         "type": entity_type,
                         # optionally: "created_by": ObjectId(user_id) if each user sees only their own
                     }
@@ -85,7 +85,7 @@ class EntityResource:
         """Handle POST request to create a new entity."""
         # Create new entity
         user_id = req.context.user_id
-        body = req.media or {}
+        body = await req.get_media() or {}
         entity_type = body.get("type")
         data = body.get("data")
 
@@ -106,9 +106,10 @@ class EntityResource:
 
         # Insert into DB
         doc = {
+            "_id": str(uuid4()),
             "type": entity_type,
             "data": data,
-            "created_by": ObjectId(user_id),  # track ownership
+            "created_by": user_id,  # track ownership
             "created_at": datetime.datetime.utcnow(),
         }
         result = await entities_coll.insert_one(doc)
@@ -126,13 +127,13 @@ class EntityResource:
         """Handle PUT request to update an existing entity."""
         # Update existing entity
         user_id = req.context.user_id
-        body = req.media or {}
-        entity_id = body.get("id")
+        body = await req.get_media() or {}
+        entity_id = body.get("_id")
         entity_type = body.get("type")
         new_data = body.get("data")
 
         if not (entity_id and entity_type and isinstance(new_data, dict)):
-            raise HTTPBadRequest(description="Must provide 'id', 'type', and 'data'")
+            raise HTTPBadRequest(description="Must provide '_id', 'type', and 'data'")
 
         # Validate new data
         schema_doc = await schemas_coll.find_one({"type": entity_type})
@@ -149,9 +150,9 @@ class EntityResource:
         # Update in DB (check ownership if needed)
         res = await entities_coll.update_one(
             {
-                "_id": ObjectId(entity_id),
+                "_id": entity_id,
                 "type": entity_type,
-                "created_by": ObjectId(user_id),
+                "created_by": user_id,
             },
             {"$set": {"data": new_data, "updated_at": datetime.datetime.utcnow()}},
         )
@@ -165,25 +166,25 @@ class EntityResource:
         )
         await redis_client.delete(f"entity_list:{entity_type}")
 
-        resp.media = {"status": "updated", "id": entity_id, "type": entity_type}
+        resp.media = {"status": "updated", "_id": entity_id, "type": entity_type}
 
     async def on_delete(self, req: Request, resp: Response) -> Response:
         """Handle DELETE request to remove an entity."""
         # Delete an entity
         user_id = req.context.user_id
         entity_type = req.get_param("type")
-        entity_id = req.get_param("id")
+        entity_id = req.get_param("_id")
 
         if not (entity_type and entity_id):
             raise HTTPBadRequest(
-                description="Query params 'type' and 'id' are required"
+                description="Query params 'type' and '_id' are required"
             )
 
         res = await entities_coll.delete_one(
             {
-                "_id": ObjectId(entity_id),
+                "_id": entity_id,
                 "type": entity_type,
-                "created_by": ObjectId(user_id),
+                "created_by": user_id,
             }
         )
 
@@ -194,7 +195,7 @@ class EntityResource:
         await redis_client.delete(f"entity:{entity_type}:{entity_id}")
         await redis_client.delete(f"entity_list:{entity_type}")
 
-        resp.media = {"status": "deleted", "id": entity_id, "type": entity_type}
+        resp.media = {"status": "deleted", "_id": entity_id, "type": entity_type}
 
 
 class SchemaResource:
@@ -232,7 +233,7 @@ class SchemaResource:
         """Handle POST request to create a new schema."""
         # Create new schema
         user_id = req.context.user_id
-        body = req.media or {}
+        body = await req.get_media() or {}
         schema_type = body.get("type")
         schema_obj = body.get("schema")
 
@@ -257,7 +258,7 @@ class SchemaResource:
         doc = {
             "type": schema_type,
             "schema": schema_obj,
-            "created_by": ObjectId(user_id),
+            "created_by": user_id,
             "created_at": datetime.datetime.utcnow(),
         }
         result = await schemas_coll.insert_one(doc)
@@ -275,7 +276,7 @@ class SchemaResource:
         """Handle PUT request to update an existing schema."""
         # Update an existing schema
         _ = req.context.user_id
-        body = req.media or {}
+        body = await req.get_media() or {}
         schema_type = body.get("type")
         schema_obj = body.get("schema")
 
