@@ -1,0 +1,321 @@
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+  - commit-msg
+
+default_language_version:
+  python: python3.10
+
+repos:
+  ##
+  # 1) Simple checks from pre-commit-hooks
+  ##
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        name: Check for large files
+        stages: [pre-commit]
+        args: [--maxkb=500]
+        # Example excludes—adjust if you actually have .sql you want to allow
+        exclude: \.sql$
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: check-executables-have-shebangs
+        stages: [pre-commit]
+      - id: check-shebang-scripts-are-executable
+        stages: [pre-commit]
+      - id: debug-statements
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: detect-private-key
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: fix-byte-order-marker
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: trailing-whitespace
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: no-commit-to-branch
+        stages: [pre-commit]
+        args:
+          - --pattern='^(?!((ci|chore|feature|fix|refactor|test)\/[a-zA-Z0-9\-]+)$).*'
+      - id: check-json
+        name: Check JSON
+        stages: [pre-commit]
+        files: \.json$
+        exclude: (^frontend/.*|\.ipynb$|node_modules/)
+      - id: check-yaml
+        name: Check YAML
+        stages: [pre-commit]
+        args: [--allow-multiple-documents]
+        exclude: (^frontend/.*|mkdocs.yaml|node_modules/)
+        files: \.(yaml|yml)$
+      - id: pretty-format-json
+        name: Format JSON
+        stages: [pre-commit]
+        args:
+          - --autofix
+          - --no-sort-keys
+        files: \.json$
+        exclude: (^frontend/.*|\.ipynb$|node_modules/)
+
+  ##
+  # 2) Format YAML
+  ##
+  - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+    rev: 0.2.3
+    hooks:
+      - id: yamlfmt
+        name: Format .yaml
+        stages: [pre-commit]
+        args:
+          - --mapping=2
+          - --sequence=4
+          - --offset=2
+          - --implicit_start
+          - --preserve-quotes
+        exclude: (^frontend/.*|^\.github/workflows/.*\.yaml|mkdocs\.(yaml|yml)|openapi.yaml|kustomization.yaml|node_modules/)
+        files: \.(yaml|yml)$
+
+  ##
+  # 3) Format Markdown
+  ##
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        name: Format .md
+        stages: [pre-commit]
+        args:
+          - --fix
+          # Example: disable MD013 (line length rule)
+          - --disable=MD013
+        exclude: CHANGELOG.md$
+        files: \.md$
+
+  ##
+  # 4) Format shell scripts
+  ##
+  - repo: https://github.com/pecigonzalo/pre-commit-shfmt
+    rev: v2.2.0
+    hooks:
+      - id: shell-fmt-docker
+        name: Format .sh
+        stages: [pre-commit]
+        args:
+          - --indent=2
+          - --binary-next-line
+          - --case-indent
+          - --space-redirects
+        files: \.sh$
+        exclude: ^(frontend/node_modules|node_modules)/
+
+  ##
+  # 5) Python Lint/Format: Ruff
+  ##
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff-format
+        name: Format .py
+        stages: [pre-commit]
+        exclude: ^(frontend/node_modules|node_modules)/
+      - id: ruff
+        name: Lint .py
+        stages: [pre-commit]
+        args:
+          - --fix
+          - --exit-non-zero-on-fix
+        files: \.py$
+        exclude: ^(frontend/node_modules|node_modules)/
+
+  ##
+  # 6) Extra Python complexity checks (flake8)
+  ##
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
+        name: Check complexity
+        stages: [pre-commit]
+        additional_dependencies:
+          - flake8-cognitive-complexity
+          - flake8-cohesion
+          - flake8-expression-complexity
+        args:
+          - --max-cognitive-complexity=20
+          - --max-expression-complexity=7
+          - --select=CCR001,ECE001
+        files: \.py$
+        exclude: ^(frontend/node_modules|node_modules)/
+
+  ##
+  # 7) Check if lock file is up-to-date (Universal Workflow - uv-lock)
+  ##
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.5.26
+    hooks:
+      - id: uv-lock
+        name: Check if lock file is up to date
+        stages: [pre-commit]
+        always_run: true
+        files: ^backend/.*pyproject\.toml$
+        pass_filenames: false
+        args:
+          - --project=backend
+
+  ##
+  # 8) Spelling checks
+  ##
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+      - id: codespell
+        name: Check spelling
+        stages: [pre-commit]
+        exclude: \.(csv|sql|yaml)$|^frontend/.*|^node_modules/.*|^backend/.*venv/.*
+        # Tweak if you'd like to allow certain non-words in code
+        args: [--ignore-words-list=crate, teh]
+
+  ##
+  # 9) Code quality & security scanning (Semgrep)
+  ##
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.91.0
+    hooks:
+      - id: semgrep-docker
+        name: Check code quality and security
+        stages: [pre-push]
+        args:
+          - ci
+          - --config=auto
+          - --skip-unknown-extensions
+          - --exclude=README.md
+          - --exclude=secrets.env
+          - --exclude=frontend/node_modules/
+          - --exclude=node_modules/
+          # Example rule exclude. Add your own or remove
+          - --exclude-rule=generic.secrets.security.detected-slack-webhook.detected-slack-webhook
+        pass_filenames: false
+
+  ##
+  # 10) Commit message checks (Conventional Commits)
+  ##
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.0.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Check commit message
+        stages: [commit-msg]
+
+  ##
+  # 11) Python type-check with mypy (if desired)
+  ##
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: Check Python types
+        stages: [pre-commit]
+        files: ^backend/.*\.py$
+        args: [--strict, --ignore-missing-imports]
+        additional_dependencies:
+          - "pydantic>=1.10.4"
+
+  ##
+  # 12) Additional Python improvements
+  ##
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.15.0
+    hooks:
+      - id: pyupgrade
+        name: Modernize Python syntax
+        stages: [pre-commit]
+        args: [--py36-plus]
+
+  - repo: https://github.com/econchick/interrogate
+    rev: 1.5.0
+    hooks:
+      - id: interrogate
+        name: Check docstring coverage
+        stages: [pre-commit]
+        exclude: ^backend/app/serve  # example
+        args: [--fail-under=80, --verbose]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets
+        args: ["--exclude-files", ".*\\.ipynb$"]
+      - id: detect-secrets
+        name: detect-secrets-jupyter
+        args: ["--exclude-files", ".*[^i][^p][^y][^n][^b]$", "--exclude-lines", '"(hash|id|authorship_tag|image/\\w+)":.*']
+
+  ##
+  # 13) Insert license text automatically (optional example)
+  ##
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.1.10
+    hooks:
+      - id: insert-license
+        files: ^backend/app/.*\.py$
+        args:
+          - --license-filepath
+          - LICENSE
+
+  ##
+  # 14) Frontend linting & formatting
+  ##
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.45.0
+    hooks:
+      - id: eslint
+        name: Lint .js/.ts
+        stages: [pre-commit]
+        files: ^frontend/.*\.(js|jsx|ts|tsx)$
+        entry: npx eslint
+        args:
+          - --fix
+          - --config=frontend/eslint.config.js
+        additional_dependencies:
+          - eslint-plugin-react
+          - eslint-plugin-react-hooks
+          - "@typescript-eslint/eslint-plugin"
+          - "@typescript-eslint/parser"
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        name: Format .js/.ts
+        stages: [pre-commit]
+        files: ^frontend/.*\.(js|jsx|ts|tsx)$
+        # If you have a Prettier config file:
+        # args: ["--config", "frontend/.prettierrc"]
+
+  ##
+  # 15) Local hooks for your React/TypeScript project
+  ##
+  - repo: local
+    hooks:
+      # If you want to run tests + build on push:
+      - id: test-frontend
+        name: Test & build frontend
+        stages: [pre-push]
+        entry: bash -c 'cd frontend && npm install && npm run test && npm run build'
+        language: system
+        files: ^frontend/.*
+        pass_filenames: false
+
+      # If you just want to run tests (like your original "react-unit-test"):
+      - id: react-unit-test
+        name: Run React unit tests
+        entry: npm --prefix frontend run test --if-present
+        language: system
+        files: ^frontend/
