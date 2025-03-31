@@ -1,0 +1,49 @@
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: mcp_mongo
+    volumes:
+      - .db:/data/db
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: mcp_app  # create default database
+    # (Add MONGO_INITDB_ROOT_USERNAME/PASSWORD if needed for auth)
+
+  redis:
+    image: redis:7-alpine
+    container_name: mcp_redis
+    ports:
+      - "6379:6379"
+    # No special config, using default
+
+  backend:
+    build:
+      context: ./backend
+    container_name: mcp_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/mcp_app
+      - REDIS_HOST=redis
+      - JWT_SECRET=supersecret-jwt-key   # in real env, generate securely
+    volumes:
+      - ./backend/app:/app
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: mcp_frontend
+    # The frontend is served via nginx on port 80 inside container
+    ports:
+      - "4096:4096"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
