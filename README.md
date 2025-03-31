@@ -2,7 +2,7 @@
 
 A simple archetype MCP v0.2 client and server implementation
 
-## Developer Instrructions
+## Developer Instructions
 
 1. Pre-commit
 
@@ -14,4 +14,10 @@ pre-commit install
 
 ```sh
 docker compose up --build
+```
+
+1. Frontend dependencies are managed locally. If you need to run eslint manually, run:
+
+```sh
+npm --prefix frontend install && npx eslint
 ```

@@ -3,34 +3,43 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { EntitiesPage } from "@/pages/EntitiesPage";
+import { Chat } from "@/components/Chat";
+import { OAuthLoginPage } from "@/pages/OAuthLoginPage";
 
 function App() {
-  // We'll store the JWT token in state.
-  // In a real app, you might store in localStorage or a Context.
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = sessionStorage.getItem("access_token");
-    if (storedToken) {
-      setToken(storedToken);
+    async function checkAuth() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user_id);
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        setUser(null);
+      }
     }
+    checkAuth();
   }, []);
 
-  const handleLogin = (newToken: string) => {
-    setToken(newToken);
-    sessionStorage.setItem("access_token", newToken); // store token in sessionStorage
+  const handleLogin = (newUser: string) => {
+    setUser(newUser);
   };
 
-  const handleLogout = () => {
-    setToken(null);
-    sessionStorage.removeItem("access_token"); // clear the session storage token
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
   };
 
   return (
     <BrowserRouter>
       <nav className="p-4 border-b mb-4 flex gap-4">
         <Link to="/">Home</Link>
-        {token ? (
+        {user ? (
           <>
             <Link to="/entities">Entities</Link>
             <button onClick={handleLogout}>Logout</button>
@@ -45,12 +54,19 @@ function App() {
       <Routes>
         <Route
           path="/"
-          element={<div className="p-4">Welcome to MCP Frontend</div>}
+          element={
+            <div className="p-4">
+              Personal DB
+              <div className="w-full">
+                <Chat />
+              </div>
+            </div>
+          }
         />
         <Route
           path="/login"
           element={
-            token ? (
+            user ? (
               <Navigate to="/entities" />
             ) : (
               <LoginPage onLogin={handleLogin} />
@@ -59,12 +75,23 @@ function App() {
         />
         <Route
           path="/register"
-          element={token ? <Navigate to="/entities" /> : <RegisterPage />}
+          element={user ? <Navigate to="/entities" /> : <RegisterPage />}
         />
         <Route
           path="/entities"
           element={
-            token ? <EntitiesPage token={token} /> : <Navigate to="/login" />
+            user ? <EntitiesPage token={user} /> : <Navigate to="/login" />
+          }
+        />
+        {/* New OAuth routes */}
+        <Route
+          path="/oauth/login"
+          element={
+            user ? (
+              <Navigate to="/entities" />
+            ) : (
+              <OAuthLoginPage onLoginOAuth={handleLogin} />
+            )
           }
         />
       </Routes>

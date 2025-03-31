@@ -9,11 +9,7 @@ export function RegisterPage() {
   const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (sessionStorage.getItem("access_token")) {
-      navigate("/");
-    }
-  }, [navigate]);
+  useEffect(() => {}, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -28,9 +24,7 @@ export function RegisterPage() {
       if (!res.ok) {
         throw new Error(data.description || "Registration failed");
       }
-      const token = data.access_token;
-      sessionStorage.setItem("access_token", token);
-      navigate("/"); // updated redirect
+      setMessage("Registration successful! Please login.");
     } catch (err: any) {
       setMessage(`Error: ${err.message}`);
     }

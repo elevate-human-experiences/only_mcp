@@ -39,6 +39,50 @@ users_coll = db["users"]
 tokens_coll = db["tokens"]
 schemas_coll = db["entity_schemas"]
 entities_coll = db["entities"]
+permissions_coll = db["permissions"]  # added permissions collection
+auth_codes_coll = db["auth_codes"]
+conversations_coll = db["conversations"]
+
+users_coll.create_index("username", unique=True)
+tokens_coll.create_index("token", unique=True)
+tokens_coll.create_index("user_id")
+schemas_coll.create_index("type", unique=True)
+entities_coll.create_index("type")
+permissions_coll.create_index("user_id", unique=True)  # added index for permissions
+conversations_coll.create_index("user_id")
 
 # Initialize async Redis client
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+
+async def populate_db() -> None:
+    """Populate the DB with default Person schema if missing."""
+    doc = await schemas_coll.find_one({"type": "Person"})
+    if not doc:
+        await schemas_coll.insert_one(
+            {
+                "type": "Person",
+                "schema": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "title": "Person",
+                    "type": "object",
+                    "properties": {
+                        "firstName": {
+                            "type": "string",
+                            "description": "The person's first name.",
+                        },
+                        "lastName": {
+                            "type": "string",
+                            "description": "The person's last name.",
+                        },
+                        "email": {
+                            "type": "string",
+                            "description": "The person's email address.",
+                            "format": "email",
+                        },
+                    },
+                    "required": ["firstName", "lastName"],
+                    "additionalProperties": False,
+                },
+            }
+        )

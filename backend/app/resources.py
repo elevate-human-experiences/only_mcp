@@ -22,215 +22,92 @@
 
 """Resources module for handling entity and schema CRUD operations."""
 
-import json
-import falcon
-import datetime
-import jsonschema
-from falcon import HTTPBadRequest, HTTPNotFound, Request, Response
-from db import entities_coll, schemas_coll, redis_client
-from uuid import uuid4
+from falcon import HTTPBadRequest, HTTPNotFound, Request, Response, HTTP_201
+from helpers.entities import EntityHelper
+from helpers.entity_schemas import SchemaHelper
+from helpers.db import populate_db
 
 
-class EntityResource:
+class EntitiesResource:
     """Resource for entity CRUDL operations."""
 
-    async def on_get(self, req: Request, resp: Response) -> Response:
-        """Handle GET request to read or list entities."""
-        _ = req.context.user_id  # from AuthMiddleware
-        entity_type = req.get_param("type")
+    async def on_get(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle GET request for entities."""
+        user_id = req.context.user_id
         entity_id = req.get_param("_id")
-
-        if not entity_type:
-            raise HTTPBadRequest(description="Missing 'type' param")
-
         if entity_id:
-            # Read single entity
-            cache_key = f"entity:{entity_type}:{entity_id}"
-            cached_entity = await redis_client.get(cache_key)
-            if cached_entity is not None:
-                data = json.loads(cached_entity)
-            else:
-                doc = await entities_coll.find_one(
-                    {
-                        "_id": entity_id,
-                        "type": entity_type,
-                        # optionally: "created_by": ObjectId(user_id) if each user sees only their own
-                    }
-                )
-                if not doc:
-                    raise HTTPNotFound()
-                data = doc["data"]
-                # Update cache
-                await redis_client.set(cache_key, json.dumps(data))
-
-            resp.media = {"id": entity_id, "type": entity_type, "data": data}
+            data = await EntityHelper.get(user_id, schema_id, entity_id)
+            if data is None:
+                raise HTTPNotFound()
+            resp.media = {"id": entity_id, "type": schema_id, "data": data}
         else:
-            # List all entities of given type
-            cache_key = f"entity_list:{entity_type}"
-            cached_list = await redis_client.get(cache_key)
-            if cached_list is not None:
-                entities = json.loads(cached_list)
-            else:
-                # Possibly filter by user if multi-tenant
-                cursor = entities_coll.find({"type": entity_type})
-                entities = []
-                docs = await cursor.to_list(length=None)
-                for doc in docs:
-                    entities.append({"id": str(doc["_id"]), "data": doc["data"]})
-                await redis_client.set(cache_key, json.dumps(entities))
+            entities = await EntityHelper.list(
+                user_id=user_id, entity_type=schema_id
+            )  # fixed argument name
+            resp.media = {"type": schema_id, "entities": entities}
 
-            resp.media = {"type": entity_type, "entities": entities}
-
-    async def on_post(self, req: Request, resp: Response) -> Response:
-        """Handle POST request to create a new entity."""
-        # Create new entity
+    async def on_post(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle POST request to create an entity."""
         user_id = req.context.user_id
         body = await req.get_media() or {}
-        entity_type = body.get("type")
         data = body.get("data")
-
-        if not entity_type or not isinstance(data, dict):
-            raise HTTPBadRequest(description="Must provide 'type' and 'data' (object)")
-
-        # Validate data against the stored JSON schema for that type
-        schema_doc = await schemas_coll.find_one({"type": entity_type})
-        if not schema_doc:
-            raise HTTPBadRequest(
-                description=f"No schema found for type '{entity_type}'"
-            )
-
+        if not isinstance(data, dict):
+            raise HTTPBadRequest(description="Must provide 'data' (object)")
         try:
-            jsonschema.validate(instance=data, schema=schema_doc["schema"])
-        except jsonschema.ValidationError as e:
-            raise HTTPBadRequest(description=f"Schema validation error: {e.message}")
+            new_id = await EntityHelper.create(user_id, schema_id, data)
+        except Exception as e:
+            raise HTTPBadRequest(description=str(e))
+        resp.status = HTTP_201
+        resp.media = {"status": "created", "id": new_id, "type": schema_id}
 
-        # Insert into DB
-        doc = {
-            "_id": str(uuid4()),
-            "type": entity_type,
-            "data": data,
-            "created_by": user_id,  # track ownership
-            "created_at": datetime.datetime.utcnow(),
-        }
-        result = await entities_coll.insert_one(doc)
-        new_id = str(result.inserted_id)
-
-        # Write-through cache: store entity data
-        await redis_client.set(f"entity:{entity_type}:{new_id}", json.dumps(data))
-        # Invalidate list cache
-        await redis_client.delete(f"entity_list:{entity_type}")
-
-        resp.status = falcon.HTTP_201
-        resp.media = {"status": "created", "id": new_id, "type": entity_type}
-
-    async def on_put(self, req: Request, resp: Response) -> Response:
-        """Handle PUT request to update an existing entity."""
-        # Update existing entity
+    async def on_put(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle PUT request to update an entity."""
         user_id = req.context.user_id
         body = await req.get_media() or {}
         entity_id = body.get("_id")
-        entity_type = body.get("type")
         new_data = body.get("data")
-
-        if not (entity_id and entity_type and isinstance(new_data, dict)):
-            raise HTTPBadRequest(description="Must provide '_id', 'type', and 'data'")
-
-        # Validate new data
-        schema_doc = await schemas_coll.find_one({"type": entity_type})
-        if not schema_doc:
-            raise HTTPBadRequest(
-                description=f"No schema found for type '{entity_type}'"
-            )
-
+        if not (entity_id and isinstance(new_data, dict)):
+            raise HTTPBadRequest(description="Must provide '_id' and 'data'")
         try:
-            jsonschema.validate(instance=new_data, schema=schema_doc["schema"])
-        except jsonschema.ValidationError as e:
-            raise HTTPBadRequest(description=f"Schema validation error: {e.message}")
-
-        # Update in DB (check ownership if needed)
-        res = await entities_coll.update_one(
-            {
-                "_id": entity_id,
-                "type": entity_type,
-                "created_by": user_id,
-            },
-            {"$set": {"data": new_data, "updated_at": datetime.datetime.utcnow()}},
-        )
-
-        if res.matched_count == 0:
+            updated = await EntityHelper.update(user_id, entity_id, schema_id, new_data)
+        except Exception as e:
+            raise HTTPBadRequest(description=str(e))
+        if not updated:
             raise HTTPNotFound(description="Entity not found or not owned by user")
+        resp.media = {"status": "updated", "_id": entity_id, "type": schema_id}
 
-        # Update cache
-        await redis_client.set(
-            f"entity:{entity_type}:{entity_id}", json.dumps(new_data)
-        )
-        await redis_client.delete(f"entity_list:{entity_type}")
-
-        resp.media = {"status": "updated", "_id": entity_id, "type": entity_type}
-
-    async def on_delete(self, req: Request, resp: Response) -> Response:
+    async def on_delete(self, req: Request, resp: Response, schema_id: str) -> None:
         """Handle DELETE request to remove an entity."""
-        # Delete an entity
         user_id = req.context.user_id
-        entity_type = req.get_param("type")
         entity_id = req.get_param("_id")
-
-        if not (entity_type and entity_id):
-            raise HTTPBadRequest(
-                description="Query params 'type' and '_id' are required"
-            )
-
-        res = await entities_coll.delete_one(
-            {
-                "_id": entity_id,
-                "type": entity_type,
-                "created_by": user_id,
-            }
-        )
-
-        if res.deleted_count == 0:
+        if not entity_id:
+            raise HTTPBadRequest(description="Query param '_id' is required")
+        deleted = await EntityHelper.delete(user_id, schema_id, entity_id)
+        if not deleted:
             raise HTTPNotFound(description="Entity not found or not owned by user")
-
-        # Remove from cache
-        await redis_client.delete(f"entity:{entity_type}:{entity_id}")
-        await redis_client.delete(f"entity_list:{entity_type}")
-
-        resp.media = {"status": "deleted", "_id": entity_id, "type": entity_type}
+        resp.media = {"status": "deleted", "_id": entity_id, "type": schema_id}
 
 
-class SchemaResource:
+class SchemasResource:
     """Resource for schema CRUDL operations."""
 
-    async def on_get(self, req: Request, resp: Response) -> Response:
+    async def on_get(self, req: Request, resp: Response) -> None:
         """Handle GET request to fetch one or all schemas."""
         _ = req.context.user_id
         schema_type = req.get_param("type")
+        await populate_db()
         if schema_type:
-            # Read single schema
-            cache_key = f"schema:{schema_type}"
-            cached = await redis_client.get(cache_key)
-            if cached is not None:
-                schema_data = json.loads(cached)
-            else:
-                doc = await schemas_coll.find_one({"type": schema_type})
-                if not doc:
-                    raise HTTPNotFound(description=f"Schema '{schema_type}' not found")
-                schema_data = doc["schema"]
-                await redis_client.set(cache_key, json.dumps(schema_data))
+            schema_data = await SchemaHelper.get(schema_type)
+            if schema_data is None:
+                raise HTTPNotFound(description=f"Schema '{schema_type}' not found")
             resp.media = {"type": schema_type, "schema": schema_data}
         else:
-            # List all schemas
-            # Could cache a list of schema types
-            # For simplicity, fetch from DB each time or use a separate key
-            cursor = schemas_coll.find({})
-            docs = await cursor.to_list(length=None)
-            schemas = []
-            for d in docs:
-                schemas.append({"type": d["type"], "schema": d["schema"]})
+            schemas = await SchemaHelper.list()
             resp.media = {"schemas": schemas}
 
-    async def on_post(self, req: Request, resp: Response) -> Response:
+    async def on_post(self, req: Request, resp: Response) -> None:
         """Handle POST request to create a new schema."""
+        await populate_db()
         # Create new schema
         user_id = req.context.user_id
         body = await req.get_media() or {}
@@ -242,38 +119,22 @@ class SchemaResource:
                 description="Must provide 'type' (string) and 'schema' (object)"
             )
 
-        # Check if schema already exists
-        existing = await schemas_coll.find_one({"type": schema_type})
-        if existing:
-            raise HTTPBadRequest(
-                description=f"Schema for type '{schema_type}' already exists"
-            )
-
-        # Optionally validate the schema itself is a valid JSON Schema
         try:
-            jsonschema.Draft202012Validator.check_schema(schema_obj)
-        except jsonschema.SchemaError as e:
-            raise HTTPBadRequest(description=f"Invalid JSON Schema: {str(e)}")
+            new_id = await SchemaHelper.create(user_id, schema_type, schema_obj)
+        except Exception as e:
+            raise HTTPBadRequest(description=str(e))
 
-        doc = {
-            "type": schema_type,
-            "schema": schema_obj,
-            "created_by": user_id,
-            "created_at": datetime.datetime.utcnow(),
-        }
-        result = await schemas_coll.insert_one(doc)
-        # Write-through cache
-        await redis_client.set(f"schema:{schema_type}", json.dumps(schema_obj))
-
-        resp.status = falcon.HTTP_201
+        resp.status = HTTP_201
         resp.media = {
             "status": "created",
             "schema_type": schema_type,
-            "id": str(result.inserted_id),
+            "id": str(new_id),
         }
 
-    async def on_put(self, req: Request, resp: Response) -> Response:
+    async def on_put(self, req: Request, resp: Response) -> None:
         """Handle PUT request to update an existing schema."""
+        await populate_db()
+
         # Update an existing schema
         _ = req.context.user_id
         body = await req.get_media() or {}
@@ -283,26 +144,17 @@ class SchemaResource:
         if not schema_type or not isinstance(schema_obj, dict):
             raise HTTPBadRequest(description="Must provide 'type' and updated 'schema'")
 
-        # Validate schema
         try:
-            jsonschema.Draft202012Validator.check_schema(schema_obj)
-        except jsonschema.SchemaError as e:
+            updated = await SchemaHelper.update(schema_type, schema_obj)
+        except Exception as e:
             raise HTTPBadRequest(description=f"Invalid JSON Schema: {str(e)}")
 
-        res = await schemas_coll.update_one(
-            {"type": schema_type},
-            {"$set": {"schema": schema_obj, "updated_at": datetime.datetime.utcnow()}},
-        )
-
-        if res.matched_count == 0:
+        if not updated:
             raise HTTPNotFound(description=f"Schema '{schema_type}' not found")
-
-        # Update cache
-        await redis_client.set(f"schema:{schema_type}", json.dumps(schema_obj))
 
         resp.media = {"status": "updated", "schema_type": schema_type}
 
-    async def on_delete(self, req: Request, resp: Response) -> Response:
+    async def on_delete(self, req: Request, resp: Response) -> None:
         """Handle DELETE request to remove a schema."""
         # Delete schema
         _ = req.context.user_id
@@ -310,15 +162,83 @@ class SchemaResource:
         if not schema_type:
             raise HTTPBadRequest(description="Query param 'type' is required")
 
-        res = await schemas_coll.delete_one({"type": schema_type})
-        if res.deleted_count == 0:
+        deleted = await SchemaHelper.delete(schema_type)
+        if not deleted:
             raise HTTPNotFound(description=f"Schema '{schema_type}' not found")
 
-        # Remove from cache
-        await redis_client.delete(f"schema:{schema_type}")
-
-        # Potentially also remove or orphan existing entities of that type
-        # or require that no entities exist for that type before deleting
-        # For now, do nothing extra.
-
         resp.media = {"status": "deleted", "schema_type": schema_type}
+
+
+class OneEntityResource:
+    """Resource for single entity CRUD operations using RESTful URL."""
+
+    async def on_get(
+        self, req: Request, resp: Response, schema_id: str, entity_id: str
+    ) -> None:
+        """Handle GET request for a single entity using RESTful URL."""
+        user_id = req.context.user_id
+        data = await EntityHelper.get(user_id, schema_id, entity_id)
+        if data is None:
+            raise HTTPNotFound(description="Entity not found")
+        resp.media = {"id": entity_id, "type": schema_id, "data": data}
+
+    async def on_put(
+        self, req: Request, resp: Response, schema_id: str, entity_id: str
+    ) -> None:
+        """Handle PUT request to update a single entity using RESTful URL."""
+        user_id = req.context.user_id
+        body = await req.get_media() or {}
+        new_data = body.get("data")
+        if not isinstance(new_data, dict):
+            raise HTTPBadRequest(description="Must provide 'data' as an object")
+        try:
+            updated = await EntityHelper.update(user_id, entity_id, schema_id, new_data)
+        except Exception as e:
+            raise HTTPBadRequest(description=str(e))
+        if not updated:
+            raise HTTPNotFound(description="Entity not found or not owned by user")
+        resp.media = {"status": "updated", "id": entity_id, "type": schema_id}
+
+    async def on_delete(
+        self, req: Request, resp: Response, schema_id: str, entity_id: str
+    ) -> None:
+        """Handle DELETE request to remove a single entity using RESTful URL."""
+        user_id = req.context.user_id
+        deleted = await EntityHelper.delete(user_id, schema_id, entity_id)
+        if not deleted:
+            raise HTTPNotFound(description="Entity not found or not owned by user")
+        resp.media = {"status": "deleted", "id": entity_id, "type": schema_id}
+
+
+class OneSchemaResource:
+    """Resource for single schema CRUD operations using RESTful URL."""
+
+    async def on_get(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle GET request for a single schema using RESTful URL."""
+        await populate_db()
+        schema_data = await SchemaHelper.get(schema_id)
+        if schema_data is None:
+            raise HTTPNotFound(description=f"Schema '{schema_id}' not found")
+        resp.media = {"type": schema_id, "schema": schema_data}
+
+    async def on_put(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle PUT request to update a single schema using RESTful URL."""
+        await populate_db()
+        body = await req.get_media() or {}
+        schema_obj = body.get("schema")
+        if not isinstance(schema_obj, dict):
+            raise HTTPBadRequest(description="Must provide 'schema' as an object")
+        try:
+            updated = await SchemaHelper.update(schema_id, schema_obj)
+        except Exception as e:
+            raise HTTPBadRequest(description=f"Invalid JSON Schema: {str(e)}")
+        if not updated:
+            raise HTTPNotFound(description=f"Schema '{schema_id}' not found")
+        resp.media = {"status": "updated", "type": schema_id}
+
+    async def on_delete(self, req: Request, resp: Response, schema_id: str) -> None:
+        """Handle DELETE request to remove a single schema using RESTful URL."""
+        deleted = await SchemaHelper.delete(schema_id)
+        if not deleted:
+            raise HTTPNotFound(description=f"Schema '{schema_id}' not found")
+        resp.media = {"status": "deleted", "type": schema_id}

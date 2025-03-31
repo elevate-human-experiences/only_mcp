@@ -13,11 +13,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (sessionStorage.getItem("access_token")) {
-      navigate("/");
-    }
-  }, [navigate]);
+  useEffect(() => {}, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -32,10 +28,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.description || "Login failed");
       }
-      const data = await res.json();
-      const token = data.access_token;
-      onLogin(token);
-      navigate("/"); // updated redirect
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message);
     }

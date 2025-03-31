@@ -29,6 +29,8 @@ services:
       - JWT_SECRET=supersecret-jwt-key   # in real env, generate securely
     volumes:
       - ./backend/app:/app
+    env_file:
+      - .env
     depends_on:
       - mongo
       - redis
@@ -39,7 +41,7 @@ services:
     container_name: mcp_frontend
     # The frontend is served via nginx on port 80 inside container
     ports:
-      - "5173:5173"
+      - "4096:4096"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public

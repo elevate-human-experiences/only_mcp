@@ -23,8 +23,19 @@
 """Application entry point for the Falcon ASGI app."""
 
 import falcon.asgi
-from auth import AuthMiddleware, RegisterResource, LoginResource
-from resources import EntityResource, SchemaResource
+from auth import (
+    AuthMiddleware,
+    RegisterResource,
+    LoginResource,
+    LogoutResource,
+    MeResource,
+)
+from resources import (
+    EntitiesResource,
+    SchemasResource,
+    OneEntityResource,
+    OneSchemaResource,
+)
 from falcon import Request, Response, media
 from pydantic import ValidationError
 import json
@@ -34,6 +45,9 @@ from typing import Any
 import nest_asyncio
 from core.setup_logging import setup_logger
 from core.encoder import CustomJsonEncoder, CustomJsonDecoder
+from oauth import OAuthAuthorizeResource, OAuthTokenResource, WellKnownOAuthResource
+from mcp import MCPResource
+from chat import ChatResource
 
 # Patch the event loop with nest_asyncio
 nest_asyncio.apply()
@@ -87,10 +101,25 @@ app.resp_options.media_handlers.update(extra_handlers)
 # Public auth endpoints
 app.add_route("/api/auth/register", RegisterResource())
 app.add_route("/api/auth/login", LoginResource())
+app.add_route("/api/auth/logout", LogoutResource())
+app.add_route("/api/auth/me", MeResource())
 
-# Protected MCP endpoints
-app.add_route("/api/entity", EntityResource())
-app.add_route("/api/schema", SchemaResource())
+# Protected RESTful endpoints
+app.add_route("/api/schemas", SchemasResource())
+app.add_route("/api/schemas/{schema_id}", OneSchemaResource())
+app.add_route("/api/schemas/{schema_id}/entities", EntitiesResource())
+app.add_route("/api/schemas/{schema_id}/entities/{entity_id}", OneEntityResource())
+
+# Auth MCP endpoints
+app.add_route("/.well-known/oauth-authorization-server", WellKnownOAuthResource())
+app.add_route("/api/oauth/authorize", OAuthAuthorizeResource())
+app.add_route("/api/oauth/token", OAuthTokenResource())
+
+# MCP endpoint
+app.add_route("/api/mcp", MCPResource())
+
+# Chat endpoint
+app.add_route("/api/chat", ChatResource())
 
 # Run with uvicorn
 if __name__ == "__main__":

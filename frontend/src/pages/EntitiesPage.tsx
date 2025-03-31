@@ -39,7 +39,7 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
 
   // Fetch available schema types
   useEffect(() => {
-    fetch("/api/schema", {
+    fetch("/api/schemas", {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -62,7 +62,7 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
   // Fetch entities of selectedType when an existing type is chosen
   useEffect(() => {
     if (!selectedType || selectedType === "new") return;
-    fetch(`/api/entity?type=${encodeURIComponent(selectedType)}`, {
+    fetch(`/api/schemas/${encodeURIComponent(selectedType)}/entities`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -81,17 +81,20 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
   const handleCreate = async () => {
     try {
       const parsedData = JSON.parse(newEntityData);
-      const res = await fetch("/api/entity", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const res = await fetch(
+        `/api/schemas/${encodeURIComponent(selectedType)}/entities`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: selectedType,
+            data: parsedData,
+          }),
         },
-        body: JSON.stringify({
-          type: selectedType,
-          data: parsedData,
-        }),
-      });
+      );
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         alert(`Create failed: ${errData.description || res.statusText}`);
@@ -101,7 +104,7 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
       alert(`Entity created with ID: ${result.id}`);
       setNewEntityData("{}");
       // Refetch entities
-      fetch(`/api/entity?type=${encodeURIComponent(selectedType)}`, {
+      fetch(`/api/schemas/${encodeURIComponent(selectedType)}/entities`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -114,7 +117,7 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this entity?")) return;
     const res = await fetch(
-      `/api/entity?type=${encodeURIComponent(selectedType)}&_id=${id}`, // parameter changed from id to _id
+      `/api/schemas/${encodeURIComponent(selectedType)}/entities/${id}`,
       {
         method: "DELETE",
         headers: {
@@ -134,7 +137,7 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
   const handleCreateSchema = async () => {
     try {
       const parsedSchema = JSON.parse(newSchemaData);
-      const res = await fetch("/api/schema", {
+      const res = await fetch("/api/schemas", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -173,25 +176,28 @@ export function EntitiesPage({ token }: EntitiesPageProps) {
     if (!editingEntity) return;
     try {
       const parsedData = JSON.parse(editingJson);
-      const res = await fetch("/api/entity", {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const res = await fetch(
+        `/api/schemas/${encodeURIComponent(selectedType)}/entities/${
+          editingEntity.id
+        }`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            data: parsedData,
+          }),
         },
-        body: JSON.stringify({
-          _id: editingEntity.id, // changed from id to _id
-          type: selectedType,
-          data: parsedData,
-        }),
-      });
+      );
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         alert(`Update failed: ${errData.description || res.statusText}`);
         return;
       }
       // Refetch entities
-      fetch(`/api/entity?type=${encodeURIComponent(selectedType)}`, {
+      fetch(`/api/schemas/${encodeURIComponent(selectedType)}/entities`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
