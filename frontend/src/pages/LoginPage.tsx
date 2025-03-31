@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-interface LoginPageProps {}
-
 export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
