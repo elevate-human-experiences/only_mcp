@@ -314,8 +314,8 @@ repos:
         pass_filenames: false
 
       # If you just want to run tests (like your original "react-unit-test"):
-      - id: react-unit-test
-        name: Run React unit tests
-        entry: npm --prefix frontend run test --if-present
-        language: system
-        files: ^frontend/
+      # - id: react-unit-test
+      #   name: Run React unit tests
+      #   entry: npm --prefix frontend run test --if-present
+      #   language: system
+      #   files: ^frontend/
