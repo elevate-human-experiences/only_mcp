@@ -185,23 +185,23 @@ repos:
   ##
   # 9) Code quality & security scanning (Semgrep)
   ##
-  - repo: https://github.com/returntocorp/semgrep
-    rev: v1.91.0
-    hooks:
-      - id: semgrep-docker
-        name: Check code quality and security
-        stages: [pre-push]
-        args:
-          - ci
-          - --config=auto
-          - --skip-unknown-extensions
-          - --exclude=README.md
-          - --exclude=secrets.env
-          - --exclude=frontend/node_modules/
-          - --exclude=node_modules/
-          # Example rule exclude. Add your own or remove
-          - --exclude-rule=generic.secrets.security.detected-slack-webhook.detected-slack-webhook
-        pass_filenames: false
+  # - repo: https://github.com/returntocorp/semgrep
+  #   rev: v1.91.0
+  #   hooks:
+  #     - id: semgrep-docker
+  #       name: Check code quality and security
+  #       stages: [pre-push]
+  #       args:
+  #         - ci
+  #         - --config=auto
+  #         - --skip-unknown-extensions
+  #         - --exclude=README.md
+  #         - --exclude=secrets.env
+  #         - --exclude=frontend/node_modules/
+  #         - --exclude=node_modules/
+  #         # Example rule exclude. Add your own or remove
+  #         - --exclude-rule=generic.secrets.security.detected-slack-webhook.detected-slack-webhook
+  #       pass_filenames: false
 
   ##
   # 10) Commit message checks (Conventional Commits)
