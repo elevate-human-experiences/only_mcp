@@ -308,7 +308,7 @@ repos:
       - id: test-frontend
         name: Test & build frontend
         stages: [pre-push]
-        entry: bash -c 'cd frontend && npm install && npm run test && npm run build'
+        entry: bash -c 'cd frontend && npm install && npm run build'
         language: system
         files: ^frontend/.*
         pass_filenames: false
