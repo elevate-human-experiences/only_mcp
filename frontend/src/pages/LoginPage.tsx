@@ -3,11 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-interface LoginPageProps {
-  onLogin: (token: string) => void;
-}
+interface LoginPageProps {}
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
