@@ -24,6 +24,7 @@ interface JSONRPCResponse {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  tool_calls?: any;
 }
 
 // Define the Tool type
@@ -38,8 +39,6 @@ export function Chat() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isConnectedToMCP, setIsConnectedToMCP] = useState<boolean>(false); // New flag
   const [tools, setTools] = useState<Tool[]>([]);
-
-  const [codeVerifier, setCodeVerifier] = useState<string | null>(null);
 
   const conversationContainerRef = useRef<HTMLDivElement>(null);
 
@@ -273,7 +272,7 @@ export function Chat() {
     if (!input.trim()) return;
 
     // Step 1: Add user message to conversation
-    const userMessage = { role: "user", content: input };
+    const userMessage: Message = { role: "user", content: input };
     const newConversation = [...conversation, userMessage];
     setConversation(newConversation);
     setInput("");
@@ -306,7 +305,7 @@ export function Chat() {
       const responseMessage = await res.json();
       // Step 4: Check if model is calling a tool
       if (responseMessage.tool_calls) {
-        const toolResults = [];
+        const toolResults: Message[] = [];
         for (const call of responseMessage.tool_calls) {
           // Now call your tool via MCP (JSON-RPC)
           const result = await callTool(
@@ -351,11 +350,11 @@ export function Chat() {
         setConversation((prev) => [...prev, responseMessage]);
       }
     } catch (error: any) {
-      const errorReply = {
+      const errorReply: Message = {
         role: "assistant",
         content: `Error: ${error.message}`,
       };
-      setConversation((prev) => [...prev, errorReply]);
+      setConversation((prev: Message[]) => [...prev, errorReply]);
     }
   };
 
