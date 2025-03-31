@@ -65,13 +65,7 @@ function App() {
         />
         <Route
           path="/login"
-          element={
-            user ? (
-              <Navigate to="/entities" />
-            ) : (
-              <LoginPage onLogin={handleLogin} />
-            )
-          }
+          element={user ? <Navigate to="/entities" /> : <LoginPage />}
         />
         <Route
           path="/register"

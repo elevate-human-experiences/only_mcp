@@ -314,7 +314,7 @@ export function Chat() {
           );
           toolResults.push({
             role: "tool",
-            tool_call_id: call.id,
+            tool_calls: call.id,
             content: JSON.stringify(result),
           });
         }
