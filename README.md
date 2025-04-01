@@ -1,6 +1,8 @@
 # only_mcp
 
-A simple MCP v0.2 client and server implementation
+A simple MCP v0.2 client and server implementation, for me to learn about MCP.
+
+IT is not a complete implementation. Neither is it to be used for production.
 
 ## Story So Far
 
